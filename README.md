@@ -1,5 +1,16 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Supabase configuration
+
+Set these public Supabase project values in `.env.local`:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
+```
+
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` is also accepted for existing projects. Staff sign in at `/admin/login`. Create staff accounts manually in Supabase Auth and add a matching `profiles` row with the `admin` or `agent` role. Public sign-up is not available.
+
 ## Getting Started
 
 First, run the development server:
