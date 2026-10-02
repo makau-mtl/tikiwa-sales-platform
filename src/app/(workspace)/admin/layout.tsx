@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "./actions";
 
@@ -26,7 +27,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   return (
     <div className="min-h-screen bg-[#f5f5f1]">
       <header className="border-b border-[#dfe2da] bg-white">
-        <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8">
+        <div className="mx-auto flex min-h-16 max-w-7xl flex-wrap items-center justify-between gap-4 px-5 sm:flex-nowrap sm:px-8">
           <a href="/admin" className="flex items-center gap-3" aria-label="Tikiwa admin home">
             <span className="grid size-9 place-items-center bg-[#1e3829] text-xs font-semibold text-white">
               TL
@@ -36,6 +37,15 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
               <span className="mt-0.5 block text-[11px] text-[#788078]">Staff workspace</span>
             </span>
           </a>
+
+          <nav aria-label="Workspace" className="order-3 flex w-full items-center gap-5 border-t border-[#dfe2da] py-3 text-sm font-medium sm:order-none sm:w-auto sm:border-0 sm:py-0">
+            <Link href="/admin" className="text-[#39443b] hover:text-[#1e3829]">
+              Projects
+            </Link>
+            <Link href="/admin/inventory" className="text-[#39443b] hover:text-[#1e3829]">
+              Inventory
+            </Link>
+          </nav>
 
           <div className="flex items-center gap-3 sm:gap-5">
             <div className="hidden text-right sm:block">
