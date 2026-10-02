@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createProject } from "../../actions";
 import { ProjectForm } from "../project-form";
+import { ToastFeedback } from "@/components/toast-feedback";
 
 export default async function NewProjectPage({
   searchParams,
@@ -28,11 +29,7 @@ export default async function NewProjectPage({
       </p>
       <h1 className="mt-2 text-3xl font-semibold text-[#202820]">Create project</h1>
       <p className="mt-2 text-sm text-[#687269]">Start with the project name and location. Add more details now or later.</p>
-      {error && (
-        <p role="alert" className="mt-5 border border-[#e2b7ae] bg-[#fff7f5] px-4 py-3 text-sm text-[#9a3f31]">
-          {error}
-        </p>
-      )}
+      <ToastFeedback message={error} />
       <div className="mt-8 border-y border-[#dfe2da] py-7">
         <ProjectForm action={createProject} submitLabel="Create project" />
       </div>

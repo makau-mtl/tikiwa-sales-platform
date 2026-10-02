@@ -9,6 +9,7 @@ import {
   slugifyProjectName,
 } from "@/lib/projects";
 import { parseCsv } from "@/lib/csv";
+import { projectSaveErrorMessage } from "@/lib/project-errors";
 
 export async function signOut() {
   const supabase = await createClient();
@@ -77,26 +78,8 @@ function numericValue(value: string, label: string, minimum: number, maximum = I
   return number;
 }
 
-function projectSaveError(error: unknown) {
-  if (typeof error === "object" && error !== null && "code" in error) {
-    const code = error.code;
-    if (code === "PGRST204" || code === "42703") {
-      return "The database is missing the new project fields. Apply the pending project-details migration, then try again.";
-    }
-    if (code === "23505") {
-      return "A project could not be saved because one of its values conflicts with an existing project.";
-    }
-  }
-
-  if (error instanceof Error && /schema cache|column .* does not exist/i.test(error.message)) {
-    return "The database is missing the new project fields. Apply the pending project-details migration, then try again.";
-  }
-
-  return error instanceof Error ? error.message : "The project could not be saved.";
-}
-
 function redirectWithProjectError(path: string, error: unknown): never {
-  redirect(`${path}?error=${encodeURIComponent(projectSaveError(error))}`);
+  redirect(`${path}?error=${encodeURIComponent(projectSaveErrorMessage(error))}`);
 }
 
 function projectValues(formData: FormData) {
@@ -303,27 +286,31 @@ export async function updateProject(formData: FormData) {
     redirectWithProjectError(`/admin/projects/${projectId}`, imageError);
   }
   revalidateInventory(projectId);
-  redirect(`/admin/projects/${projectId}`);
+  redirect(`/admin/projects/${projectId}?notice=project-saved`);
 }
 
 export async function toggleProjectPublication(formData: FormData) {
   const supabase = await requireAdmin();
   const projectId = requiredString(formData, "project_id", "Project");
+  const requestedReturn = formString(formData, "return_to");
+  const returnPath = requestedReturn === "/admin" || requestedReturn === `/admin/projects/${projectId}`
+    ? requestedReturn
+    : `/admin/inventory/${projectId}`;
   const { data: project, error: readError } = await supabase
     .from("projects")
     .select("is_published")
     .eq("id", projectId)
     .single();
 
-  if (readError) throw new Error(readError.message);
+  if (readError) redirect(`${returnPath}?error=${encodeURIComponent("Project status could not be loaded. Try again.")}`);
   const { error } = await supabase
     .from("projects")
     .update({ is_published: !project.is_published })
     .eq("id", projectId);
 
-  if (error) throw new Error(error.message);
+  if (error) redirect(`${returnPath}?error=${encodeURIComponent("Project status could not be updated. Try again.")}`);
   revalidateInventory(projectId);
-  redirect(`/admin/inventory/${projectId}`);
+  redirect(`${returnPath}?notice=project-publication-updated`);
 }
 
 export async function showAiMasterplanComingSoon(formData: FormData) {
@@ -334,6 +321,10 @@ export async function showAiMasterplanComingSoon(formData: FormData) {
 
 function redirectWithMutationError(projectId: string, message: string): never {
   redirect(`/admin/projects/${projectId}/mutations?error=${encodeURIComponent(message)}`);
+}
+
+function redirectWithInventoryError(projectId: string, message: string): never {
+  redirect(`/admin/inventory/${projectId}?error=${encodeURIComponent(message)}`);
 }
 
 export async function uploadMutation(formData: FormData) {
@@ -390,18 +381,18 @@ export async function deleteProject(formData: FormData) {
     .eq("id", projectId)
     .single();
 
-  if (projectError) throw new Error(projectError.message);
+  if (projectError) redirect(`/admin?error=${encodeURIComponent("The project could not be loaded for deletion.")}`);
   if (confirmName !== project.name) {
-    throw new Error("The project name confirmation does not match.");
+    redirect(`/admin?error=${encodeURIComponent("The project name did not match. The project was not deleted.")}`);
   }
 
   const { count: visitCount, error: visitsError } = await supabase
     .from("site_visits")
     .select("id", { count: "exact", head: true })
     .eq("project_id", projectId);
-  if (visitsError) throw new Error(visitsError.message);
+  if (visitsError) redirect(`/admin?error=${encodeURIComponent("Scheduled visits could not be checked. The project was not deleted.")}`);
   if (visitCount) {
-    throw new Error("Projects with scheduled site visits cannot be deleted.");
+    redirect(`/admin?error=${encodeURIComponent("This project has scheduled site visits and cannot be deleted yet.")}`);
   }
 
   const { data: media, error: mediaError } = await supabase
@@ -409,30 +400,30 @@ export async function deleteProject(formData: FormData) {
     .select("url")
     .eq("project_id", projectId);
 
-  if (mediaError) throw new Error(mediaError.message);
+  if (mediaError) redirect(`/admin?error=${encodeURIComponent("Project media could not be checked. The project was not deleted.")}`);
   const paths = (media ?? []).map((item) => item.url);
   if (paths.length) {
     const { error } = await supabase.storage.from(projectMediaBucket).remove(paths);
-    if (error) throw new Error(error.message);
+    if (error) redirect(`/admin?error=${encodeURIComponent("Project media could not be removed. The project was not deleted.")}`);
   }
 
   const { data: mutationUploads, error: mutationUploadsError } = await supabase
     .from("mutation_uploads")
     .select("file_path")
     .eq("project_id", projectId);
-  if (mutationUploadsError) throw new Error(mutationUploadsError.message);
+  if (mutationUploadsError) redirect(`/admin?error=${encodeURIComponent("Mutation documents could not be checked. The project was not deleted.")}`);
   const mutationPaths = (mutationUploads ?? []).map((upload) => upload.file_path);
   if (mutationPaths.length) {
     const { error } = await supabase.storage
       .from(mutationDocumentsBucket)
       .remove(mutationPaths);
-    if (error) throw new Error(error.message);
+    if (error) redirect(`/admin?error=${encodeURIComponent("Mutation documents could not be removed. The project was not deleted.")}`);
   }
 
   const { error } = await supabase.from("projects").delete().eq("id", projectId);
-  if (error) throw new Error(error.message);
+  if (error) redirect(`/admin?error=${encodeURIComponent("The project could not be deleted. Please try again.")}`);
   revalidateInventory();
-  redirect("/admin");
+  redirect("/admin?notice=project-deleted");
 }
 
 export async function createPlotBatch(formData: FormData) {
@@ -441,13 +432,13 @@ export async function createPlotBatch(formData: FormData) {
   const sizeLabel = requiredString(formData, "size_label", "Plot size");
   const identifierPrefix = requiredString(formData, "identifier_prefix", "Identifier prefix");
   if (!/^[A-Za-z0-9][A-Za-z0-9-]*-$/.test(identifierPrefix)) {
-    throw new Error("Prefix must start with a letter or number and end with a hyphen, for example A-.");
+    redirectWithInventoryError(projectId, "Use a block prefix that starts with a letter or number and ends with a hyphen, such as A-.");
   }
 
   const startNumber = numericValue(formString(formData, "start_number"), "Start number", 1);
   const quantity = numericValue(formString(formData, "quantity"), "Quantity", 1, 500);
   if (!Number.isInteger(startNumber) || !Number.isInteger(quantity)) {
-    throw new Error("Start number and quantity must be whole numbers.");
+    redirectWithInventoryError(projectId, "Start number and plot count must be whole numbers.");
   }
 
   const lastNumber = startNumber + quantity - 1;
@@ -462,10 +453,9 @@ export async function createPlotBatch(formData: FormData) {
     .select("plot_number")
     .eq("project_id", projectId)
     .in("plot_number", plotNumbers);
-  if (existingError) throw new Error(existingError.message);
+  if (existingError) redirectWithInventoryError(projectId, "Existing plots could not be checked. Try again.");
   if (existingPlots?.length) {
-    const duplicates = existingPlots.map((plot) => plot.plot_number).join(", ");
-    throw new Error(`These plot identifiers already exist: ${duplicates}.`);
+    redirectWithInventoryError(projectId, "Some generated plot numbers already exist. Choose a different prefix or starting number.");
   }
 
   const { error } = await supabase.from("plots").insert(
@@ -477,9 +467,9 @@ export async function createPlotBatch(formData: FormData) {
     })),
   );
 
-  if (error) throw new Error(error.message);
+  if (error) redirectWithInventoryError(projectId, "Plots could not be added. Check the details and try again.");
   revalidateInventory(projectId);
-  redirect(`/admin/inventory/${projectId}`);
+  redirect(`/admin/inventory/${projectId}?notice=plots-added`);
 }
 
 export async function createPlot(formData: FormData) {
@@ -493,11 +483,11 @@ export async function createPlot(formData: FormData) {
   });
 
   if (error && "code" in error && error.code === "23505") {
-    throw new Error("That plot number already exists in this project.");
+    redirectWithInventoryError(projectId, "That plot number already exists in this project.");
   }
-  if (error) throw new Error(error.message);
+  if (error) redirectWithInventoryError(projectId, "The plot could not be added. Check the details and try again.");
   revalidateInventory(projectId);
-  redirect(`/admin/inventory/${projectId}`);
+  redirect(`/admin/inventory/${projectId}?notice=plot-added`);
 }
 
 export async function importPlotCsv(
@@ -636,9 +626,9 @@ export async function updatePlot(formData: FormData) {
     .eq("id", plotId)
     .eq("project_id", projectId);
 
-  if (error) throw new Error(error.message);
+  if (error) redirectWithInventoryError(projectId, "The plot could not be updated. Check the details and try again.");
   revalidateInventory(projectId);
-  redirect(`/admin/inventory/${projectId}`);
+  redirect(`/admin/inventory/${projectId}?notice=plot-updated`);
 }
 
 export async function deletePlot(formData: FormData) {
@@ -651,9 +641,9 @@ export async function deletePlot(formData: FormData) {
     .eq("id", plotId)
     .eq("project_id", projectId);
 
-  if (error) throw new Error(error.message);
+  if (error) redirectWithInventoryError(projectId, "The plot could not be deleted. Try again.");
   revalidateInventory(projectId);
-  redirect(`/admin/projects/${projectId}`);
+  redirect(`/admin/inventory/${projectId}?notice=plot-deleted`);
 }
 
 export async function uploadProjectImage(formData: FormData) {
@@ -663,13 +653,13 @@ export async function uploadProjectImage(formData: FormData) {
   const kind = formString(formData, "kind") || "image";
 
   if (!(image instanceof File) || image.size === 0) {
-    throw new Error("Choose an image to upload.");
+    redirect(`/admin/projects/${projectId}/media?error=${encodeURIComponent("Choose an image to upload.")}`);
   }
   if (!['image', 'map'].includes(kind)) {
-    throw new Error("Choose a valid project media type.");
+    redirect(`/admin/projects/${projectId}/media?error=${encodeURIComponent("Choose a valid media type.")}`);
   }
   if (!allowedImageTypes.includes(image.type) || image.size > maxImageSize) {
-    throw new Error("Use a JPEG, PNG, WebP, or AVIF image up to 5 MB.");
+    redirect(`/admin/projects/${projectId}/media?error=${encodeURIComponent("Use a JPEG, PNG, WebP, or AVIF image up to 5 MB.")}`);
   }
 
   const { data: project, error: projectError } = await supabase
@@ -677,14 +667,14 @@ export async function uploadProjectImage(formData: FormData) {
     .select("id")
     .eq("id", projectId)
     .single();
-  if (projectError) throw new Error(projectError.message);
+  if (projectError) redirect(`/admin/projects/${projectId}/media?error=${encodeURIComponent("Project media could not be loaded. Try again.")}`);
 
   const extension = image.type.split("/")[1].replace("jpeg", "jpg");
   const objectPath = `${project.id}/${crypto.randomUUID()}.${extension}`;
   const { error: uploadError } = await supabase.storage
     .from(projectMediaBucket)
     .upload(objectPath, image, { contentType: image.type, upsert: false });
-  if (uploadError) throw new Error(uploadError.message);
+  if (uploadError) redirect(`/admin/projects/${projectId}/media?error=${encodeURIComponent("The image could not be uploaded. Try again.")}`);
 
   const { error: mediaError } = await supabase.from("project_media").insert({
     project_id: projectId,
@@ -694,11 +684,11 @@ export async function uploadProjectImage(formData: FormData) {
 
   if (mediaError) {
     await supabase.storage.from(projectMediaBucket).remove([objectPath]);
-    throw new Error(mediaError.message);
+    redirect(`/admin/projects/${projectId}/media?error=${encodeURIComponent("Image details could not be saved. Try again.")}`);
   }
 
   revalidateInventory(projectId);
-  redirect(`/admin/projects/${projectId}/media`);
+  redirect(`/admin/projects/${projectId}/media?notice=media-updated`);
 }
 
 export async function deleteProjectImage(formData: FormData) {
@@ -712,18 +702,18 @@ export async function deleteProjectImage(formData: FormData) {
     .eq("project_id", projectId)
     .single();
 
-  if (mediaError) throw new Error(mediaError.message);
+  if (mediaError) redirect(`/admin/projects/${projectId}/media?error=${encodeURIComponent("The image could not be found. Refresh and try again.")}`);
   const { error: storageError } = await supabase.storage
     .from(projectMediaBucket)
     .remove([media.url]);
-  if (storageError) throw new Error(storageError.message);
+  if (storageError) redirect(`/admin/projects/${projectId}/media?error=${encodeURIComponent("The image could not be removed. Try again.")}`);
 
   const { error } = await supabase
     .from("project_media")
     .delete()
     .eq("id", mediaId)
     .eq("project_id", projectId);
-  if (error) throw new Error(error.message);
+  if (error) redirect(`/admin/projects/${projectId}/media?error=${encodeURIComponent("Image details could not be removed. Try again.")}`);
   revalidateInventory(projectId);
-  redirect(`/admin/projects/${projectId}/media`);
+  redirect(`/admin/projects/${projectId}/media?notice=media-updated`);
 }

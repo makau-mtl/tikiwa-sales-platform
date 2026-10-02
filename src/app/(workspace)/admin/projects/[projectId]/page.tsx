@@ -4,6 +4,7 @@ import { toggleProjectPublication, updateProject } from "../../actions";
 import { createClient } from "@/lib/supabase/server";
 import { ProjectForm } from "../project-form";
 import { splitProjectDescription } from "@/lib/projects";
+import { ToastFeedback } from "@/components/toast-feedback";
 
 const money = new Intl.NumberFormat("en-KE", {
   style: "currency",
@@ -16,7 +17,7 @@ export default async function ProjectDetailPage({
   searchParams,
 }: PageProps<"/admin/projects/[projectId]">) {
   const { projectId } = await params;
-  const { error: saveError } = await searchParams;
+  const { error: saveError, notice } = await searchParams;
   const supabase = await createClient();
   const [
     { data: project, error: projectError },
@@ -35,6 +36,13 @@ export default async function ProjectDetailPage({
 
   return (
     <section>
+      <ToastFeedback message={saveError} />
+      {notice === "project-saved" && (
+        <ToastFeedback message="Project details saved." kind="success" />
+      )}
+      {notice === "project-publication-updated" && (
+        <ToastFeedback message="Project publication status updated." kind="success" />
+      )}
       <Link href="/admin" className="text-sm font-medium text-[#526457] hover:text-[#1e3829]">
         ← Projects
       </Link>
@@ -67,11 +75,6 @@ export default async function ProjectDetailPage({
           <h2 id="details-heading" className="text-lg font-semibold text-[#29332b]">
             Project details
           </h2>
-          {saveError && (
-            <p role="alert" className="mt-4 border border-[#e2b7ae] bg-[#fff7f5] px-4 py-3 text-sm text-[#9a3f31]">
-              {saveError}
-            </p>
-          )}
           {isAdmin ? (
             <div className="mt-5">
               <ProjectForm project={project} action={updateProject} submitLabel="Save changes" />

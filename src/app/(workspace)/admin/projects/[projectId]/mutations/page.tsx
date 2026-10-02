@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { uploadMutation } from "../../../actions";
 import { createClient } from "@/lib/supabase/server";
+import { ToastFeedback } from "@/components/toast-feedback";
 
 const uploadDate = new Intl.DateTimeFormat("en-KE", {
   dateStyle: "medium",
@@ -13,7 +14,7 @@ export default async function MutationUploadsPage({
   searchParams,
 }: PageProps<"/admin/projects/[projectId]/mutations">) {
   const { projectId } = await params;
-  const { error: actionError } = await searchParams;
+  const { error: actionError, notice } = await searchParams;
   const supabase = await createClient();
   const [
     { data: project },
@@ -37,6 +38,8 @@ export default async function MutationUploadsPage({
 
   return (
     <section className="max-w-4xl">
+      <ToastFeedback message={actionError} />
+      {notice === "mutation-uploaded" && <ToastFeedback message="Mutation document uploaded." kind="success" />}
       <Link href={`/admin/projects/${projectId}`} className="text-sm font-medium text-[#526457] hover:text-[#1e3829]">
         ← {project.name}
       </Link>
@@ -53,11 +56,6 @@ export default async function MutationUploadsPage({
         <p className="mt-1 text-sm text-[#687269]">
           PDF, JPG, and PNG files up to 5 MB. OCR is not enabled; uploads are stored for future extraction and review.
         </p>
-        {actionError && (
-          <p role="alert" className="mt-4 border border-[#e2b7ae] bg-[#fff7f5] px-4 py-3 text-sm text-[#9a3f31]">
-            {actionError}
-          </p>
-        )}
         {isAdmin && (
           <form action={uploadMutation} encType="multipart/form-data" className="mt-5 flex flex-wrap items-end gap-3">
             <input type="hidden" name="project_id" value={projectId} />

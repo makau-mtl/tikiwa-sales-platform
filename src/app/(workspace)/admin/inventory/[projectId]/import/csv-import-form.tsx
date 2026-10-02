@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { importPlotCsv, type PlotCsvImportState } from "../../../actions";
 
 const initialState: PlotCsvImportState = {
@@ -12,6 +13,21 @@ const initialState: PlotCsvImportState = {
 export function CsvImportForm({ projectId }: { projectId: string }) {
   const action = importPlotCsv.bind(null, projectId);
   const [state, formAction, pending] = useActionState(action, initialState);
+  const lastResult = useRef("");
+
+  useEffect(() => {
+    if (state.imported === null && state.errors.length === 0) return;
+    const signature = `${state.imported}:${state.rejected}:${state.errors.join("|")}`;
+    if (lastResult.current === signature) return;
+    lastResult.current = signature;
+    if (state.imported === null) {
+      toast.error(state.errors[0] ?? "The CSV import could not be completed.");
+    } else if (state.rejected > 0) {
+      toast.warning(`${state.imported} plots imported; ${state.rejected} rows need attention.`);
+    } else {
+      toast.success(`${state.imported} plots imported.`);
+    }
+  }, [state]);
 
   return (
     <form action={formAction} className="mt-6 space-y-5">

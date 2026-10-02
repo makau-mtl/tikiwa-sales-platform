@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { ToastFeedback } from "@/components/toast-feedback";
 
 export default async function ProjectCreatedPage({
   params,
@@ -40,6 +41,7 @@ export default async function ProjectCreatedPage({
 
   return (
     <section className="mx-auto max-w-3xl">
+      <ToastFeedback message={`${project.name} was created successfully.`} kind="success" />
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#a15b35]">Project setup</p>
       <h1 className="mt-2 text-3xl font-semibold text-[#202820]">Project created successfully</h1>
       <p className="mt-2 text-sm text-[#687269]">{project.name} · {project.location}</p>

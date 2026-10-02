@@ -3,13 +3,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { showAiMasterplanComingSoon, uploadProjectImage, deleteProjectImage } from "../../../actions";
 import { createClient } from "@/lib/supabase/server";
+import { ToastFeedback } from "@/components/toast-feedback";
 
 export default async function ProjectMediaPage({
   params,
   searchParams,
 }: PageProps<"/admin/projects/[projectId]/media">) {
   const { projectId } = await params;
-  const { masterplan } = await searchParams;
+  const { masterplan, notice, error } = await searchParams;
   const supabase = await createClient();
   const [{ data: project }, { data: media }, { data: userData }] = await Promise.all([
     supabase.from("projects").select("id, name").eq("id", projectId).maybeSingle(),
@@ -37,6 +38,8 @@ export default async function ProjectMediaPage({
 
   return (
     <section className="max-w-5xl">
+      <ToastFeedback message={error} />
+      {notice === "media-updated" && <ToastFeedback message="Project media updated." kind="success" />}
       <Link href={`/admin/projects/${projectId}`} className="text-sm font-medium text-[#526457] hover:text-[#1e3829]">
         ← {project.name}
       </Link>
